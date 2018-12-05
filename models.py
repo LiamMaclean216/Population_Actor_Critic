@@ -50,6 +50,7 @@ class Discriminator(nn.Module):
            # nn.Dropout(0.2),
             nn.Linear(256, 2))
         
+        
     def forward(self, out):
         out = out.unsqueeze(1)
         
@@ -62,6 +63,12 @@ class Discriminator(nn.Module):
         
         out1 = self.layer5(out)
         out = self.layer6(out1)
+        #print(out.shape)
+        confidence = nn.Softplus()(out[...,1]).unsqueeze(-1)
+        out = torch.cat([out[...,0].unsqueeze(-1),confidence],-1)
+        #print(confidence.shape,out.shape)
+        #out[...,1] = F.softplus(out[...,1])
+        
         #out[...,1]*=(out[...,1]>0).type('torch.cuda.FloatTensor')
         #out[...,1] = torch.clamp(out[...,1],min=0)
         #out[...,0] = torch.tanh(out[...,0])
