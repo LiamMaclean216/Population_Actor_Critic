@@ -46,9 +46,10 @@ class Discriminator(nn.Module):
             nn.MaxPool1d(2, stride=1))
         
         self.layer5 = nn.Linear(5856, 256)
-        self.layer6 = nn.Sequential(
+        self.layer6 = nn.Linear(256, 16)
+        self.layer7 = nn.Sequential(
            # nn.Dropout(0.2),
-            nn.Linear(256, 2))
+            nn.Linear(16, 2))
         
         
     def forward(self, out):
@@ -58,21 +59,16 @@ class Discriminator(nn.Module):
         out = self.layer2(out)
         out = self.layer3(out)
         out = self.layer4(out)
-        #print(out.shape)
         out = out.view(out.size(0),out.size(1)*out.size(2))
         
-        out1 = self.layer5(out)
-        out = self.layer6(out1)
-        #print(out.shape)
+        out = self.layer5(out)
+        out_latent = self.layer6(out)
+        out = self.layer7(out_latent)
+        
         confidence = nn.Softplus()(out[...,1]).unsqueeze(-1)
         out = torch.cat([out[...,0].unsqueeze(-1),confidence],-1)
-        #print(confidence.shape,out.shape)
-        #out[...,1] = F.softplus(out[...,1])
         
-        #out[...,1]*=(out[...,1]>0).type('torch.cuda.FloatTensor')
-        #out[...,1] = torch.clamp(out[...,1],min=0)
-        #out[...,0] = torch.tanh(out[...,0])
-        return out,out1
+        return out,out_latent
     
 class Generator(nn.Module):
     def __init__(self,creature_size,device):
@@ -80,40 +76,50 @@ class Generator(nn.Module):
         self.device = device
         self.creature_size = creature_size
         self.layer1 = nn.Sequential(
-            nn.Conv1d(1, 8, 5, stride=2, padding=0),  
+            nn.ConvTranspose1d(416, 256, 4, stride=1, padding=0),  
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(0.2, inplace=True),)
+            #nn.MaxPool1d(2, stride=1))
+            
+        self.layer2 = nn.Sequential(    
+            nn.ConvTranspose1d(256, 128, 4, stride=1, padding=0),  
+            nn.BatchNorm1d(128),
+            nn.LeakyReLU(0.2, inplace=True),)
+            #nn.MaxPool1d(2, stride=1))
+        
+        self.hidden_size = 300
+        self.n_layers = 1
+        self.gru = nn.GRU(896, self.hidden_size, self.n_layers, bidirectional=True)
+        self.hidden = None
+        
+        self.layer3 = nn.Sequential(
+            nn.Conv1d(1, 8, 5, stride=1, padding=0),  
             nn.BatchNorm1d(8),
             nn.LeakyReLU(0.2, inplace=True),
             nn.MaxPool1d(2, stride=1))
             
-        self.layer2 = nn.Sequential(    
-            nn.Conv1d(8, 16, 5, stride=2, padding=0),  
-            nn.BatchNorm1d(16),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.MaxPool1d(2, stride=1))
-        
-        self.layer3 = nn.Sequential(    
-            nn.Conv1d(16, 32, 5, stride=2, padding=0),  
-            nn.BatchNorm1d(32),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.MaxPool1d(2, stride=1))
-        
         self.layer4 = nn.Sequential(    
-            nn.Conv1d(32, 16, 5, stride=2, padding=0),  
+            nn.Conv1d(8, 16, 5, stride=1, padding=0),  
             nn.BatchNorm1d(16),
             nn.LeakyReLU(0.2, inplace=True),
             nn.MaxPool1d(2, stride=1))
-        self.layer5 = nn.Linear(336, creature_size)
+        
+        self.layer5 = nn.Linear(9440, creature_size)
+        
     def forward(self,x,lr):
         if len(list(x.shape)) > 1:
             rand = torch.rand([x.size(0),30]).to(self.device)
         else:
             rand = torch.rand([30]).to(self.device)
         
-        out = torch.cat([x,rand],-1)#.unsqueeze(-1)
+        out = torch.cat([x,rand],-1).unsqueeze(-1)
         
-        out = out.unsqueeze(1)
         out = self.layer1(out)
         out = self.layer2(out)
+        #print(out.shape)
+        out = out.view(out.size(0),1,out.size(1)*out.size(2))
+        out, self.hidden = self.gru(out,self.hidden)
+        #print(out.shape)
         out = self.layer3(out)
         out = self.layer4(out)
         #print(out.shape)
