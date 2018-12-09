@@ -65,18 +65,25 @@ class Discriminator(nn.Module):
         out_latent = self.layer6(out)
         out = self.layer7(out_latent)
         
-        confidence = nn.Softplus()(out[...,1]).unsqueeze(-1)
-        out = torch.cat([out[...,0].unsqueeze(-1),confidence],-1)
+        #confidence = nn.Sigmoid()(nn.Softplus()(out[...,1]).unsqueeze(-1))
+        confidence = nn.Sigmoid()(out[...,1]).unsqueeze(-1) * 4
+        prediction = nn.Tanh()(out[...,0]).unsqueeze(-1) 
+        
+        #confidence = nn.Sigmoid()(out[...,1]).unsqueeze(-1) * 5
+        #prediction = nn.Tanh()(out[...,0]).unsqueeze(-1) * 5
+        
+        out = torch.cat([prediction,confidence],-1)
         
         return out,out_latent
     
 class Generator(nn.Module):
-    def __init__(self,creature_size,device):
+    def __init__(self,creature_size,device,population_size):
         super(Generator, self).__init__()
         self.device = device
+        self.population_size = population_size
         self.creature_size = creature_size
         self.layer1 = nn.Sequential(
-            nn.ConvTranspose1d(416, 256, 4, stride=1, padding=0),  
+            nn.ConvTranspose1d(386, 256, 4, stride=1, padding=0),  
             nn.BatchNorm1d(256),
             nn.LeakyReLU(0.2, inplace=True),)
             #nn.MaxPool1d(2, stride=1))
@@ -112,18 +119,24 @@ class Generator(nn.Module):
         else:
             rand = torch.rand([30]).to(self.device)
         
-        out = torch.cat([x,rand],-1).unsqueeze(-1)
+        #out = torch.cat([x,rand],-1).unsqueeze(-1)
         
-        out = self.layer1(out)
+        out = self.layer1(x.unsqueeze(-1))
         out = self.layer2(out)
         #print(out.shape)
-        out = out.view(out.size(0),1,out.size(1)*out.size(2))
+        out = out.view(self.population_size,out.size(0)//self.population_size,out.size(1)*out.size(2))
         out, self.hidden = self.gru(out,self.hidden)
+        out = out.view(out.size(0)*out.size(1),1,out.size(2))
         #print(out.shape)
         out = self.layer3(out)
         out = self.layer4(out)
+        
         #print(out.shape)
         out = out.view(out.size(0),out.size(1)*out.size(2))
-        out = torch.tanh(self.layer5(out)) * lr
         
-        return out
+        out = self.layer5(out)
+                
+        
+        #out = torch.tanh(out) * lr
+        
+        return out,out
