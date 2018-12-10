@@ -113,13 +113,7 @@ class Generator(nn.Module):
         
         self.layer5 = nn.Linear(9440, creature_size)
         
-    def forward(self,x,lr):
-        if len(list(x.shape)) > 1:
-            rand = torch.rand([x.size(0),30]).to(self.device)
-        else:
-            rand = torch.rand([30]).to(self.device)
-        
-        #out = torch.cat([x,rand],-1).unsqueeze(-1)
+    def forward(self,x):
         
         out = self.layer1(x.unsqueeze(-1))
         out = self.layer2(out)
